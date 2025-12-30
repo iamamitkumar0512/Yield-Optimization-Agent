@@ -698,13 +698,13 @@ export const quickTransactionTool = tool(
         }
       }
 
-      // If everything fails, return error
+      // If everything fails, return error with basic info
       return JSON.stringify({
-        error: `Failed to generate quick transaction: ${errorMessage}`,
+        error: `Failed to generate quick transaction: ${errorMessage}. This is likely due to Enso API limitations (free tier may not support transaction bundling).`,
         mode: "quick",
         failed: true,
         suggestion:
-          "Please verify the protocol name, token address, and chain are correct.",
+          "The Enso API's getBundleData endpoint returned a 400 error. This typically means the API key doesn't have access to transaction bundling features. You can still use the protocol information to interact directly with the vault.",
       });
     }
   },
