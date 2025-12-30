@@ -265,7 +265,7 @@ yarn test
 
 ## Dependencies
 
-- **LangChain**: Agent framework
+- **LangGraph**: Agent framework
 - **Enso SDK**: Protocol discovery and transaction generation
 - **CoinGecko API**: Token information
 - **viem**: Ethereum utilities
@@ -282,11 +282,5 @@ yarn test
 5. **Start with small amounts** when trying new protocols
 6. **This is not financial advice** - do your own research
 
-## License
 
-Private - Internal use only
-
-## Contributing
-
-This is an internal project. For questions or issues, contact the development team.
 
