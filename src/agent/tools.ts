@@ -11,10 +11,12 @@ import {
   discoverProtocols,
   discoverProtocolsMultiChain,
   generateTransactionBundle,
+  checkApprovalNeeded,
 } from "./enso-service";
 import {
   addSafetyScores,
   sortProtocolsBySafetyAndYield,
+  evaluateProtocolSafety,
 } from "./safety-service";
 import {
   validateTokenInput,
@@ -23,6 +25,7 @@ import {
 } from "./validation";
 import { Logger } from "../common/logger";
 import { ProtocolVault } from "./types";
+import { getChainByName, getChainById } from "../common/types";
 
 const logger = new Logger("AgentTools");
 
@@ -366,20 +369,39 @@ export const validateInputTool = tool(
     const { input: userInput, inputType } = input;
     try {
       if (inputType === "token") {
-        const validation = validateTokenInput(userInput);
+        // Type guard: ensure userInput is an object for TokenInput
+        if (
+          typeof userInput === "object" &&
+          userInput !== null &&
+          !Array.isArray(userInput)
+        ) {
+          const validation = validateTokenInput(userInput as any);
+          return JSON.stringify({
+            valid: validation.valid,
+            errors: validation.errors,
+            warnings: validation.warnings,
+          });
+        }
         return JSON.stringify({
-          valid: validation.valid,
-          errors: validation.errors,
-          warnings: validation.warnings,
+          valid: false,
+          error:
+            "Token input must be an object with token, chainId, and chainName properties",
         });
       }
 
       if (inputType === "chain") {
-        const validation = validateChain(userInput);
+        // Type guard: ensure userInput is string or number for chain
+        if (typeof userInput === "string" || typeof userInput === "number") {
+          const validation = validateChain(userInput);
+          return JSON.stringify({
+            valid: validation.valid,
+            error: validation.error,
+            supportedChains: validation.supportedChains,
+          });
+        }
         return JSON.stringify({
-          valid: validation.valid,
-          error: validation.error,
-          supportedChains: validation.supportedChains,
+          valid: false,
+          error: "Chain input must be a string or number",
         });
       }
 
@@ -408,6 +430,309 @@ export const validateInputTool = tool(
 );
 
 /**
+ * Tool: Quick transaction generation (when all parameters provided)
+ */
+export const quickTransactionTool = tool(
+  async (input): Promise<string> => {
+    const {
+      tokenAddress,
+      chainId,
+      chainName,
+      protocolName,
+      amount,
+      userAddress,
+    } = input;
+    try {
+      logger.info(
+        `Quick transaction mode: ${amount} ${tokenAddress} on ${chainName || chainId} to ${protocolName}`
+      );
+
+      // Validate inputs using viem's isAddress (handles checksum properly)
+      if (!isAddress(tokenAddress)) {
+        return JSON.stringify({
+          error:
+            "Invalid token address format. Must be a valid Ethereum address",
+        });
+      }
+
+      if (!isAddress(userAddress)) {
+        return JSON.stringify({
+          error:
+            "Invalid user address format. Must be a valid Ethereum address",
+        });
+      }
+
+      const resolvedChainId =
+        chainId || (chainName ? getChainByName(chainName)?.id : undefined);
+
+      if (!resolvedChainId) {
+        return JSON.stringify({
+          error: `Invalid chain: ${chainName || chainId}. Supported chains: Ethereum, Arbitrum, Optimism, Polygon, Base, Avalanche, BNB Chain`,
+        });
+      }
+
+      if (!protocolName || protocolName.trim().length === 0) {
+        return JSON.stringify({
+          error: "Protocol name is required",
+        });
+      }
+
+      if (!amount || parseFloat(amount) <= 0) {
+        return JSON.stringify({
+          error: "Amount must be a positive number",
+        });
+      }
+
+      // Get token info
+      const tokenInfo = await getTokenInfo(
+        tokenAddress,
+        resolvedChainId,
+        chainName
+      );
+
+      if (!tokenInfo || Array.isArray(tokenInfo)) {
+        return JSON.stringify({
+          error: "Token not found or multiple tokens found",
+        });
+      }
+
+      // Discover protocols on the specified chain only (quick mode - no multi-chain search)
+      const allProtocols = await discoverProtocols(
+        tokenAddress,
+        resolvedChainId
+      );
+
+      if (allProtocols.length === 0) {
+        return JSON.stringify({
+          error: `No protocols found for token ${tokenInfo.symbol} on ${chainName || getChainById(resolvedChainId)?.name || resolvedChainId}`,
+          suggestion:
+            "Try a different chain or check if the token supports staking on this chain",
+        });
+      }
+
+      // Find protocol by name (case-insensitive, partial match)
+      const protocolLower = protocolName.toLowerCase();
+      const matchingProtocols = allProtocols.filter(
+        (p) =>
+          p.protocol.toLowerCase().includes(protocolLower) ||
+          p.name.toLowerCase().includes(protocolLower)
+      );
+
+      if (matchingProtocols.length === 0) {
+        return JSON.stringify({
+          error: `Protocol "${protocolName}" not found for token ${tokenInfo.symbol} on ${chainName || getChainById(resolvedChainId)?.name || resolvedChainId}`,
+          suggestion: `Available protocols on this chain: ${allProtocols
+            .slice(0, 10)
+            .map((p) => `${p.protocol} (${p.name})`)
+            .join(", ")}`,
+        });
+      }
+
+      // If multiple vaults match, select the one with highest APY
+      // Sort by APY (descending), then by TVL as tiebreaker
+      const selectedProtocol = matchingProtocols.sort((a, b) => {
+        const apyDiff = b.apy - a.apy;
+        if (Math.abs(apyDiff) > 0.01) {
+          // If APY difference is significant (>0.01%), prioritize APY
+          return apyDiff;
+        }
+        // If APY is similar, prefer higher TVL (more established)
+        return b.tvl - a.tvl;
+      })[0];
+
+      logger.info(
+        `Selected vault: ${selectedProtocol.name} (APY: ${selectedProtocol.apy}%, TVL: $${selectedProtocol.tvl.toLocaleString()})`
+      );
+
+      // Evaluate safety for this protocol
+      const safetyScore = await evaluateProtocolSafety(selectedProtocol);
+
+      // Convert amount to wei
+      const amountNum = parseFloat(amount);
+      const amountWei = BigInt(
+        Math.floor(amountNum * Math.pow(10, tokenInfo.decimals))
+      );
+
+      // Check if approval is needed
+      const approvalCheck = await checkApprovalNeeded(
+        userAddress,
+        tokenAddress,
+        selectedProtocol.address,
+        resolvedChainId,
+        amountWei
+      );
+
+      // Generate transaction bundle
+      // CRITICAL: Use the EXACT protocol field from Enso's token data
+      // In Parifi (line 70 of enso.tsx), they pass the protocol field directly
+      // This is the protocol identifier that Enso expects in getBundleData
+      const protocolNameForTx = selectedProtocol.protocol;
+
+      logger.info(
+        `Using protocol name "${protocolNameForTx}" for transaction generation (vault: ${selectedProtocol.name}, project: ${selectedProtocol.project}, protocol: ${selectedProtocol.protocol})`
+      );
+
+      const bundle = await generateTransactionBundle(
+        userAddress,
+        tokenAddress,
+        selectedProtocol.address,
+        protocolNameForTx,
+        resolvedChainId,
+        amountWei,
+        tokenInfo.symbol,
+        tokenInfo.decimals
+      );
+
+      return JSON.stringify({
+        success: true,
+        mode: "quick",
+        tokenInfo: {
+          name: tokenInfo.name,
+          symbol: tokenInfo.symbol,
+          address: tokenAddress,
+          chain: chainName || getChainById(resolvedChainId)?.name || "",
+          chainId: resolvedChainId,
+          decimals: tokenInfo.decimals,
+          price: tokenInfo.price,
+          marketCap: tokenInfo.marketCap,
+        },
+        protocol: {
+          address: selectedProtocol.address,
+          name: selectedProtocol.name,
+          protocol: selectedProtocol.protocol,
+          chainId: resolvedChainId,
+          chainName: selectedProtocol.chainName,
+          apy: selectedProtocol.apy,
+          tvl: selectedProtocol.tvl,
+          safetyScore: safetyScore,
+        },
+        approvalNeeded: approvalCheck.approvalNeeded,
+        bundle: {
+          approvalTransaction: bundle.approvalTransaction,
+          depositTransaction: bundle.depositTransaction,
+          executionOrder: bundle.executionOrder,
+          totalGasEstimate: bundle.totalGasEstimate,
+        },
+        warning:
+          "⚠️ CRITICAL: This transaction object was generated by an AI agent. Please verify all details (token address, protocol address, amount, chain) before executing. Double-check on block explorer and protocol website. This is not financial advice.",
+      });
+    } catch (error) {
+      logger.error("Error in quickTransactionTool:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+
+      // Resolve chainId for fallback
+      const fallbackChainId =
+        chainId || (chainName ? getChainByName(chainName)?.id : undefined);
+
+      // If transaction generation failed, try to at least return protocol info
+      // This allows the user to see available protocols even if tx generation fails
+      if (fallbackChainId) {
+        try {
+          const allProtocols = await discoverProtocols(
+            tokenAddress,
+            fallbackChainId
+          );
+
+          // Filter for Aave protocol specifically
+          const aaveProtocols = allProtocols.filter(
+            (p) =>
+              p.protocol.toLowerCase().includes("aave") ||
+              p.name.toLowerCase().includes("aave")
+          );
+
+          if (aaveProtocols.length > 0) {
+            // Add safety scores to Aave protocols
+            const protocolsWithSafety = await addSafetyScores(aaveProtocols, 5);
+            const sortedProtocols =
+              sortProtocolsBySafetyAndYield(protocolsWithSafety);
+
+          // Return the selected vault info even if transaction failed
+          const selectedVault = sortedProtocols[0];
+          return JSON.stringify({
+            error: `Failed to generate transaction: ${errorMessage}. This may be due to API limitations.`,
+            mode: "quick",
+            failed: true,
+            transactionGenerationFailed: true,
+            message:
+              "Could not generate transaction bundle, but here is the selected Aave protocol information:",
+            tokenInfo: {
+              name: tokenInfo.name,
+              symbol: tokenInfo.symbol,
+              address: tokenAddress,
+              decimals: tokenInfo.decimals,
+              chain: chainName || getChainById(fallbackChainId)?.name,
+              chainId: fallbackChainId,
+            },
+            vault: {
+              address: selectedVault.address,
+              name: selectedVault.name,
+              symbol: selectedVault.symbol,
+              protocol: selectedVault.protocol,
+              project: selectedVault.project,
+              apy: selectedVault.apy,
+              tvl: selectedVault.tvl,
+              chainId: selectedVault.chainId,
+              chainName: selectedVault.chainName,
+              safetyScore: selectedVault.safetyScore,
+            },
+            protocols: sortedProtocols.map((p) => ({
+              address: p.address,
+              name: p.name,
+              protocol: p.protocol,
+              chainId: p.chainId,
+              chainName: p.chainName,
+              apy: p.apy,
+              tvl: p.tvl,
+              safetyScore: p.safetyScore,
+            })),
+            suggestion:
+              "Transaction generation failed due to API limitations. You can interact with the protocol directly using the vault address above, or contact support to upgrade API access.",
+          });
+          }
+        } catch (fallbackError) {
+          logger.error(
+            "Fallback protocol discovery also failed:",
+            fallbackError
+          );
+        }
+      }
+
+      // If everything fails, return error
+      return JSON.stringify({
+        error: `Failed to generate quick transaction: ${errorMessage}`,
+        mode: "quick",
+        failed: true,
+        suggestion:
+          "Please verify the protocol name, token address, and chain are correct.",
+      });
+    }
+  },
+  {
+    name: "quick_transaction",
+    description:
+      "Generate transaction bundle directly when user provides token address, chain, protocol, amount, and user address. Use this for quick mode when all parameters are available. Returns vault info and transaction objects immediately.",
+    schema: z.object({
+      tokenAddress: z.string().describe("Token contract address"),
+      chainId: z.number().optional().describe("Chain ID"),
+      chainName: z
+        .string()
+        .optional()
+        .describe("Chain name (e.g., Ethereum, Arbitrum)"),
+      protocolName: z
+        .string()
+        .describe("Protocol name (e.g., aave, morpho, compound)"),
+      amount: z
+        .string()
+        .describe(
+          "Amount to deposit (human-readable, e.g., '100' for 100 tokens)"
+        ),
+      userAddress: z.string().describe("User wallet address"),
+    }),
+  }
+);
+
+/**
  * Get all tools for the agent
  */
 export function getYieldAgentTools(): Array<ReturnType<typeof tool>> {
@@ -416,6 +741,7 @@ export function getYieldAgentTools(): Array<ReturnType<typeof tool>> {
     searchTokenTool,
     discoverProtocolsTool,
     generateTransactionTool,
+    quickTransactionTool,
     validateInputTool,
   ];
 }

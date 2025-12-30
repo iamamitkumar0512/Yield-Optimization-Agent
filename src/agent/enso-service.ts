@@ -3,7 +3,7 @@
  * Handles protocol discovery, approval checks, and transaction bundle creation
  */
 
-import { EnsoClient, BundleAction, BundleParams } from "@ensofinance/sdk";
+import { EnsoClient, BundleAction, BundleParams, BundleActionType } from "@ensofinance/sdk";
 import { isAddress } from "viem";
 import { formatUnits } from "viem";
 import {
@@ -95,11 +95,17 @@ export async function discoverProtocols(
           typeof token.tvl === "string"
             ? parseFloat(token.tvl)
             : token.tvl || 0;
+        
+        // Log token fields for first protocol to debug
+        if (protocols.length === 0) {
+          logger.info(`First protocol token fields: protocol="${token.protocol}", project="${token.project}", name="${token.name}"`);
+        }
+        
         protocols.push({
           address: token.address,
           name: token.name,
           symbol: token.symbol,
-          protocol: token.project || "unknown",
+          protocol: token.protocol || token.project || "unknown", // Use token.protocol first (this is what Parifi uses)
           chainId: chainId,
           chainName: chain.name,
           apy: apyValue,
@@ -161,6 +167,7 @@ export async function discoverProtocolsMultiChain(
 
 /**
  * Check if token approval is needed
+ * Note: Enso SDK's getApprovalData returns the spender address, not requires it as input
  */
 export async function checkApprovalNeeded(
   userAddress: string,
@@ -171,13 +178,12 @@ export async function checkApprovalNeeded(
 ): Promise<ApprovalCheckResult> {
   try {
     logger.info(
-      `Checking approval for token ${tokenAddress}, spender ${protocolAddress}, amount ${amount.toString()}`
+      `Checking approval for token ${tokenAddress}, amount ${amount.toString()} on chain ${chainId}`
     );
 
     if (
       !isAddress(userAddress) ||
-      !isAddress(tokenAddress) ||
-      !isAddress(protocolAddress)
+      !isAddress(tokenAddress)
     ) {
       return {
         approvalNeeded: false,
@@ -186,13 +192,10 @@ export async function checkApprovalNeeded(
       };
     }
 
-    // Note: In a real implementation, you would check the current allowance on-chain
-    // For now, we'll assume approval is needed and generate the approval transaction
-    // The Enso SDK getApprovalData will handle the actual allowance check
-
     const client = getEnsoClient();
 
     try {
+      // getApprovalData returns the spender address we need to approve
       const approvalData = await retryWithBackoff(async () => {
         return await client.getApprovalData({
           fromAddress: userAddress as `0x${string}`,
@@ -202,21 +205,24 @@ export async function checkApprovalNeeded(
         });
       });
 
+      // Use the spender address returned by Enso, not the protocol address
+      const spenderAddress = approvalData.spender || approvalData.tx.to;
+
       const approvalTransaction: ApprovalTransaction = {
         to: approvalData.tx.to,
         data: approvalData.tx.data,
         value:
           typeof approvalData.tx.value === "string"
             ? approvalData.tx.value
-            : approvalData.tx.value.toString(),
+            : approvalData.tx.value?.toString() || "0",
         gasLimit:
           typeof approvalData.gas === "string"
             ? approvalData.gas
-            : approvalData.gas.toString(),
+            : approvalData.gas?.toString() || "0",
         gasPrice: undefined, // Not provided by Enso SDK
         chainId: chainId,
         tokenAddress: tokenAddress,
-        spender: protocolAddress,
+        spender: spenderAddress,
         amount: amount.toString(),
         type: "approve",
         safetyWarning:
@@ -263,8 +269,14 @@ export async function generateTransactionBundle(
   decimals: number
 ): Promise<TransactionBundle> {
   try {
+    // Normalize protocol name for Enso API (lowercase, remove "Standard" prefix)
+    const normalizedProtocolName = protocolName
+      .toLowerCase()
+      .replace(/^standard\s+/i, "")
+      .trim();
+
     logger.info(
-      `Generating transaction bundle for ${tokenSymbol} deposit to ${protocolName} on chain ${chainId}`
+      `Generating transaction bundle for ${tokenSymbol} deposit to ${normalizedProtocolName} (original: ${protocolName}) on chain ${chainId}`
     );
 
     if (
@@ -290,7 +302,7 @@ export async function generateTransactionBundle(
     const bundleActions: BundleAction[] = [
       {
         protocol: protocolName,
-        action: "deposit",
+        action: BundleActionType.Deposit,
         args: {
           tokenIn: tokenAddress as `0x${string}`,
           tokenOut: protocolAddress as `0x${string}`,
@@ -307,8 +319,17 @@ export async function generateTransactionBundle(
       receiver: userAddress as `0x${string}`,
     };
 
+    logger.info(`Bundle params: ${JSON.stringify(bundleParams)}`);
+    logger.info(`Bundle actions: ${JSON.stringify(bundleActions)}`);
+
     const depositTxData = await retryWithBackoff(async () => {
-      return await client.getBundleData(bundleParams, bundleActions);
+      const result = await client.getBundleData(bundleParams, bundleActions);
+      logger.info(`Bundle data received: ${JSON.stringify(result)}`);
+      return result;
+    }).catch((err) => {
+      logger.error(`getBundleData error details:`, err);
+      logger.error(`Error response:`, err.response || err.responseData || 'No response data');
+      throw err;
     });
 
     const depositTransaction: DepositTransaction = {
@@ -317,14 +338,14 @@ export async function generateTransactionBundle(
       value:
         typeof depositTxData.tx.value === "string"
           ? depositTxData.tx.value
-          : depositTxData.tx.value.toString(),
+          : depositTxData.tx.value?.toString() || "0",
       gasLimit:
         typeof depositTxData.gas === "string"
           ? depositTxData.gas
-          : depositTxData.gas.toString(),
+          : depositTxData.gas?.toString() || "0",
       gasPrice: undefined, // Not provided by Enso SDK
       chainId: chainId,
-      protocol: protocolName,
+      protocol: normalizedProtocolName,
       action: "deposit",
       tokenIn: {
         address: tokenAddress,

@@ -16,6 +16,8 @@ export default tseslint.config(
 
     files: ['**/*.ts', '**/*.mts', 'src/**/*.ts'],
 
+    ignores: ['test-*.ts', 'test-scenarios.ts'],
+
     plugins: {
       '@typescript-eslint': tseslint.plugin,
     },
@@ -37,6 +39,32 @@ export default tseslint.config(
       parserOptions: {
         project: true,
       },
+    },
+  },
+  {
+    // Separate config for test files without typed linting
+    files: ['test-*.ts', 'test-scenarios.ts'],
+
+    plugins: {
+      '@typescript-eslint': tseslint.plugin,
+    },
+
+    rules: {
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+
+    languageOptions: {
+      parser: tseslint.parser,
+      ecmaVersion: 2020,
+      sourceType: 'module',
+
+      globals: {
+        ...globals.node,
+      },
+
+      // No typed linting for test files
+      parserOptions: {},
     },
   },
   {
