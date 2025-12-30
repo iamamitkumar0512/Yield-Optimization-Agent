@@ -3,7 +3,12 @@
  * Handles protocol discovery, approval checks, and transaction bundle creation
  */
 
-import { EnsoClient, BundleAction, BundleParams, BundleActionType } from "@ensofinance/sdk";
+import {
+  EnsoClient,
+  BundleAction,
+  BundleParams,
+  BundleActionType,
+} from "@ensofinance/sdk";
 import { isAddress } from "viem";
 import { formatUnits } from "viem";
 import {
@@ -95,12 +100,14 @@ export async function discoverProtocols(
           typeof token.tvl === "string"
             ? parseFloat(token.tvl)
             : token.tvl || 0;
-        
+
         // Log token fields for first protocol to debug
         if (protocols.length === 0) {
-          logger.info(`First protocol token fields: protocol="${token.protocol}", project="${token.project}", name="${token.name}"`);
+          logger.info(
+            `First protocol token fields: protocol="${token.protocol}", project="${token.project}", name="${token.name}"`
+          );
         }
-        
+
         protocols.push({
           address: token.address,
           name: token.name,
@@ -181,10 +188,7 @@ export async function checkApprovalNeeded(
       `Checking approval for token ${tokenAddress}, amount ${amount.toString()} on chain ${chainId}`
     );
 
-    if (
-      !isAddress(userAddress) ||
-      !isAddress(tokenAddress)
-    ) {
+    if (!isAddress(userAddress) || !isAddress(tokenAddress)) {
       return {
         approvalNeeded: false,
         error: "Invalid address format",
@@ -328,7 +332,10 @@ export async function generateTransactionBundle(
       return result;
     }).catch((err) => {
       logger.error(`getBundleData error details:`, err);
-      logger.error(`Error response:`, err.response || err.responseData || 'No response data');
+      logger.error(
+        `Error response:`,
+        err.response || err.responseData || "No response data"
+      );
       throw err;
     });
 

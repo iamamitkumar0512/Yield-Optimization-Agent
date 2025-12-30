@@ -647,48 +647,48 @@ export const quickTransactionTool = tool(
             const sortedProtocols =
               sortProtocolsBySafetyAndYield(protocolsWithSafety);
 
-          // Return the selected vault info even if transaction failed
-          const selectedVault = sortedProtocols[0];
-          return JSON.stringify({
-            error: `Failed to generate transaction: ${errorMessage}. This may be due to API limitations.`,
-            mode: "quick",
-            failed: true,
-            transactionGenerationFailed: true,
-            message:
-              "Could not generate transaction bundle, but here is the selected Aave protocol information:",
-            tokenInfo: {
-              name: tokenInfo.name,
-              symbol: tokenInfo.symbol,
-              address: tokenAddress,
-              decimals: tokenInfo.decimals,
-              chain: chainName || getChainById(fallbackChainId)?.name,
-              chainId: fallbackChainId,
-            },
-            vault: {
-              address: selectedVault.address,
-              name: selectedVault.name,
-              symbol: selectedVault.symbol,
-              protocol: selectedVault.protocol,
-              project: selectedVault.project,
-              apy: selectedVault.apy,
-              tvl: selectedVault.tvl,
-              chainId: selectedVault.chainId,
-              chainName: selectedVault.chainName,
-              safetyScore: selectedVault.safetyScore,
-            },
-            protocols: sortedProtocols.map((p) => ({
-              address: p.address,
-              name: p.name,
-              protocol: p.protocol,
-              chainId: p.chainId,
-              chainName: p.chainName,
-              apy: p.apy,
-              tvl: p.tvl,
-              safetyScore: p.safetyScore,
-            })),
-            suggestion:
-              "Transaction generation failed due to API limitations. You can interact with the protocol directly using the vault address above, or contact support to upgrade API access.",
-          });
+            // Return the selected vault info even if transaction failed
+            const selectedVault = sortedProtocols[0];
+            return JSON.stringify({
+              error: `Failed to generate transaction: ${errorMessage}. This may be due to API limitations.`,
+              mode: "quick",
+              failed: true,
+              transactionGenerationFailed: true,
+              message:
+                "Could not generate transaction bundle, but here is the selected Aave protocol information:",
+              tokenInfo: {
+                name: tokenInfo.name,
+                symbol: tokenInfo.symbol,
+                address: tokenAddress,
+                decimals: tokenInfo.decimals,
+                chain: chainName || getChainById(fallbackChainId)?.name,
+                chainId: fallbackChainId,
+              },
+              vault: {
+                address: selectedVault.address,
+                name: selectedVault.name,
+                symbol: selectedVault.symbol,
+                protocol: selectedVault.protocol,
+                project: selectedVault.project,
+                apy: selectedVault.apy,
+                tvl: selectedVault.tvl,
+                chainId: selectedVault.chainId,
+                chainName: selectedVault.chainName,
+                safetyScore: selectedVault.safetyScore,
+              },
+              protocols: sortedProtocols.map((p) => ({
+                address: p.address,
+                name: p.name,
+                protocol: p.protocol,
+                chainId: p.chainId,
+                chainName: p.chainName,
+                apy: p.apy,
+                tvl: p.tvl,
+                safetyScore: p.safetyScore,
+              })),
+              suggestion:
+                "Transaction generation failed due to API limitations. You can interact with the protocol directly using the vault address above, or contact support to upgrade API access.",
+            });
           }
         } catch (fallbackError) {
           logger.error(
