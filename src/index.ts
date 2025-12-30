@@ -14,9 +14,9 @@ dotenv.config();
  */
 async function main(): Promise<void> {
   const questions = [
-    "Find staking opportunities for USDC", // Scenario 1: Token symbol - should show all chains
+    // "Find staking opportunities for USDC", // Scenario 1: Token symbol - should show all chains
     // "Find staking opportunities for 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // Scenario 2: Address without chain - should error
-    // "Find staking opportunities for 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 on Ethereum", // Scenario 3: Address with chain - should process directly
+    "Find staking opportunities for 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 on Ethereum on morpho", // Scenario 3: Address with chain - should process directly
   ];
 
   try {

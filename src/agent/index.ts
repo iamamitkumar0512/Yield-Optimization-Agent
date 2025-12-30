@@ -28,7 +28,7 @@ const DEFAULT_OPTIONS: Required<AgentOptions> = {
   systemPrompt: SystemPrompt,
   responseSchema: ResponseSchema,
   delayBetweenQuestionsMs: 2000, // Increased from 500ms to 2s to avoid rate limits
-  maxTokens: 2000, // Limit token usage per request
+  maxTokens: 4000, // Increased to handle longer responses (was 2000)
   maxRetries: 3,
 };
 

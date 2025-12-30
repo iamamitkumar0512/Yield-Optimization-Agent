@@ -10,6 +10,8 @@ An AI-powered agent that helps users find the best and safest staking opportunit
 - 🛡️ **Safety Evaluation**: Comprehensive safety scoring based on TVL, reputation, audits, and history
 - 💰 **Transaction Generation**: Generate approval and deposit transactions using Enso SDK
 - ⚠️ **Safety First**: Mandatory safety warnings and comprehensive validation
+- ⚡ **Optimized**: Returns top protocols only to minimize API usage and token consumption
+- 🔄 **Rate Limit Handling**: Automatic retry with exponential backoff for API rate limits
 
 ## Installation
 
@@ -30,20 +32,22 @@ Create a `.env` file in the root directory:
 OPENAI_API_KEY=your_openai_api_key
 ENSO_API_KEY=your_enso_api_key
 
-# Optional but recommended
-COINGECKO_API_KEY=your_coingecko_api_key
+# Optional but recommended (for token information)
+COINGECKO_API_KEY=your_coingecko_demo_api_key
 ```
+
+**Note**: The CoinGecko API key is optional. If not provided, the agent will use fallback mock data for common tokens. For production use, a CoinGecko demo API key is recommended.
 
 ## Usage
 
 ### Basic Usage
 
 ```typescript
-import { runYieldAgent } from './src';
+import { runYieldAgent } from "./src";
 
 const questions = [
-  'Find staking opportunities for USDC',
-  'What protocols can I stake ETH on Arbitrum?',
+  "Find staking opportunities for USDC",
+  "What protocols can I stake ETH on Arbitrum?",
 ];
 
 const results = await runYieldAgent(questions);
@@ -69,6 +73,7 @@ Users can provide all information in one command:
 ```
 
 The agent will:
+
 - Parse all inputs
 - Validate everything
 - Generate transaction bundle immediately
@@ -83,18 +88,24 @@ The agent will:
 Run the yield optimization agent with a list of questions.
 
 **Parameters:**
+
 - `questions: string[]` - Array of user questions
 - `options?: AgentOptions` - Optional configuration
+  - `modelName?: string` - OpenAI model name (default: "gpt-4o-mini")
+  - `temperature?: number` - Model temperature (default: 0)
+  - `maxTokens?: number` - Maximum tokens per response (default: 4000)
+  - `maxRetries?: number` - Maximum retries for rate limits (default: 3)
+  - `delayBetweenQuestionsMs?: number` - Delay between questions in ms (default: 2000)
 
 **Returns:** `Promise<AgentResponse[]>`
 
 **Example:**
+
 ```typescript
-const results = await runYieldAgent([
-  'Find staking for USDC on Arbitrum'
-], {
-  modelName: 'gpt-4o-mini',
-  temperature: 0
+const results = await runYieldAgent(["Find staking for USDC on Arbitrum"], {
+  modelName: "gpt-4o-mini",
+  temperature: 0,
+  maxTokens: 4000,
 });
 ```
 
@@ -116,7 +127,7 @@ const results = await runYieldAgent([
 #### Safety Service (`src/agent/safety-service.ts`)
 
 - `evaluateProtocolSafety(protocol)` - Evaluate protocol safety score
-- `addSafetyScores(protocols)` - Add safety scores to protocols
+- `addSafetyScores(protocols, maxProtocols?)` - Add safety scores to protocols (limits evaluation to top protocols by TVL)
 - `sortProtocolsBySafetyAndYield(protocols)` - Sort protocols by safety and yield
 
 #### Validation (`src/agent/validation.ts`)
@@ -150,6 +161,7 @@ This is not financial advice.
 ### Pre-Transaction Checks
 
 Before generating any transaction, the agent verifies:
+
 - Token exists on specified chain
 - Protocol exists for token on chain
 - User has sufficient balance
@@ -171,15 +183,18 @@ Before generating any transaction, the agent verifies:
 Protocols are evaluated based on:
 
 1. **TVL (Total Value Locked)**
+
    - > $100M: Very Safe
    - $10M - $100M: Safe
    - < $10M: Risky
 
 2. **Protocol Reputation**
+
    - Trusted protocols (Aave, Compound, Lido, etc.)
    - Unknown protocols flagged
 
 3. **Audit Status**
+
    - Verified audits from DefiLlama
    - Audit count and quality
 
@@ -202,6 +217,31 @@ Protocols are evaluated based on:
 1. Generate deposit transaction
 2. User executes deposit transaction
 
+## Performance & Optimization
+
+### Protocol Limiting
+
+To optimize API usage and prevent token limit errors, the agent:
+
+1. **Pre-filters by TVL**: Sorts protocols by Total Value Locked and selects top 20
+2. **Evaluates safety**: Only evaluates safety scores for top 20 protocols (saves API credits)
+3. **Returns top results**: Returns top 15 protocols sorted by safety + yield
+
+This approach ensures:
+
+- ✅ Reduced API credit consumption (evaluating 20 instead of 100+ protocols)
+- ✅ No token limit errors (returning 15 instead of 100+ protocols)
+- ✅ Best protocols still shown (top by TVL, then sorted by safety + yield)
+
+### Rate Limiting & Retries
+
+The agent includes automatic rate limit handling:
+
+- **Automatic retry**: Retries on 429 rate limit errors with exponential backoff
+- **Smart detection**: Distinguishes between rate limits (retryable) and quota issues (not retryable)
+- **Configurable delays**: 2 second delay between questions by default
+- **Max retries**: Configurable retry attempts (default: 3)
+
 ## Error Handling
 
 The agent handles various error cases:
@@ -212,7 +252,8 @@ The agent handles various error cases:
 - Unsupported chain
 - Insufficient balance
 - Network errors
-- API rate limiting
+- API rate limiting (with automatic retry)
+- Quota/billing issues (with helpful error messages)
 
 All errors include clear messages and suggestions.
 
@@ -267,9 +308,20 @@ yarn test
 
 - **LangGraph**: Agent framework
 - **Enso SDK**: Protocol discovery and transaction generation
-- **CoinGecko API**: Token information
+- **CoinGecko API**: Token information (optional, uses mock data if not provided)
 - **viem**: Ethereum utilities
 - **Zod**: Schema validation
+- **OpenAI API**: LLM for agent reasoning
+
+## API Usage Optimization
+
+The agent is optimized to minimize API usage:
+
+- **Protocol filtering**: Only evaluates top 20 protocols by TVL
+- **Result limiting**: Returns top 15 protocols to user
+- **Lazy initialization**: CoinGecko client only initialized when API key is available
+- **Batch processing**: Safety evaluations processed in batches of 5
+- **Token limits**: Configurable max tokens (default: 4000) to handle responses efficiently
 
 ## Important Notes
 
@@ -281,6 +333,3 @@ yarn test
 4. **Review safety scores** before selecting protocols
 5. **Start with small amounts** when trying new protocols
 6. **This is not financial advice** - do your own research
-
-
-

@@ -3,21 +3,28 @@
  * Wraps service functions as tools that the agent can use
  */
 
-import { tool } from '@langchain/core/tools';
-import { z } from 'zod';
-import { isAddress } from 'viem';
-import { getTokenInfo, searchToken } from './api';
+import { tool } from "@langchain/core/tools";
+import { z } from "zod";
+import { isAddress } from "viem";
+import { getTokenInfo, searchToken } from "./api";
 import {
   discoverProtocols,
   discoverProtocolsMultiChain,
   generateTransactionBundle,
-} from './enso-service';
-import { addSafetyScores, sortProtocolsBySafetyAndYield } from './safety-service';
-import { validateTokenInput, validateChain, validateAmount } from './validation';
-import { Logger } from '../common/logger';
-import { ProtocolVault } from './types';
+} from "./enso-service";
+import {
+  addSafetyScores,
+  sortProtocolsBySafetyAndYield,
+} from "./safety-service";
+import {
+  validateTokenInput,
+  validateChain,
+  validateAmount,
+} from "./validation";
+import { Logger } from "../common/logger";
+import { ProtocolVault } from "./types";
 
-const logger = new Logger('AgentTools');
+const logger = new Logger("AgentTools");
 
 /**
  * Tool: Get token information
@@ -32,7 +39,7 @@ export const getTokenInfoTool = tool(
       const validation = validateTokenInput({ token, chainId, chainName });
       if (!validation.valid) {
         return JSON.stringify({
-          error: validation.error || validation.errors?.join(', '),
+          error: validation.error || validation.errors?.join(", "),
           validationErrors: validation.errors,
         });
       }
@@ -43,7 +50,8 @@ export const getTokenInfoTool = tool(
       // If address provided but no chain, return error
       if (isTokenAddress && !chainId && !chainName) {
         return JSON.stringify({
-          error: 'Chain must be provided when using token address. Please specify the chain (e.g., ethereum, arbitrum, base).',
+          error:
+            "Chain must be provided when using token address. Please specify the chain (e.g., ethereum, arbitrum, base).",
           requiresChain: true,
         });
       }
@@ -52,7 +60,8 @@ export const getTokenInfoTool = tool(
 
       if (!tokenInfo) {
         return JSON.stringify({
-          error: 'Token not found. Please check spelling or provide contract address with chain.',
+          error:
+            "Token not found. Please check spelling or provide contract address with chain.",
         });
       }
 
@@ -61,12 +70,16 @@ export const getTokenInfoTool = tool(
         return JSON.stringify({
           multipleMatches: true,
           tokens: tokenInfo,
-          message: `Multiple tokens found. Please select one: ${tokenInfo.map((t) => `${t.name} (${t.symbol})`).join(', ')}`,
+          message: `Multiple tokens found. Please select one: ${tokenInfo.map((t) => `${t.name} (${t.symbol})`).join(", ")}`,
         });
       }
 
       // If only name/symbol provided (not address), show all chains
-      if (!isTokenAddress && tokenInfo.allChains && tokenInfo.allChains.length > 0) {
+      if (
+        !isTokenAddress &&
+        tokenInfo.allChains &&
+        tokenInfo.allChains.length > 0
+      ) {
         return JSON.stringify({
           success: true,
           token: {
@@ -85,7 +98,8 @@ export const getTokenInfoTool = tool(
           })),
           requiresConfirmation: true,
           message: `Found ${tokenInfo.name} (${tokenInfo.symbol}) on ${tokenInfo.allChains.length} chain(s). Please confirm which chain and address you want to use:`,
-          warning: '⚠️ Please verify token details and select the correct chain before proceeding',
+          warning:
+            "⚠️ Please verify token details and select the correct chain before proceeding",
         });
       }
 
@@ -93,25 +107,35 @@ export const getTokenInfoTool = tool(
       return JSON.stringify({
         success: true,
         token: tokenInfo,
-        warning: '⚠️ Please verify token details before proceeding',
+        warning: "⚠️ Please verify token details before proceeding",
       });
     } catch (error) {
-      logger.error('Error in getTokenInfoTool:', error);
+      logger.error("Error in getTokenInfoTool:", error);
       return JSON.stringify({
-        error: `Failed to get token info: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error: `Failed to get token info: ${error instanceof Error ? error.message : "Unknown error"}`,
       });
     }
   },
   {
-    name: 'get_token_info',
+    name: "get_token_info",
     description:
-      'Get token information by name, symbol, or address. IMPORTANT: If token is an address, chainId or chainName MUST be provided (will return error otherwise). If only name/symbol is provided, returns token info for ALL supported chains - user must then confirm which chain to use.',
+      "Get token information by name, symbol, or address. IMPORTANT: If token is an address, chainId or chainName MUST be provided (will return error otherwise). If only name/symbol is provided, returns token info for ALL supported chains - user must then confirm which chain to use.",
     schema: z.object({
-      token: z.string().describe('Token name, symbol, or contract address'),
-      chainId: z.number().optional().describe('Chain ID (REQUIRED if token is an address, optional for name/symbol)'),
-      chainName: z.string().optional().describe('Chain name (REQUIRED if token is an address, optional for name/symbol)'),
+      token: z.string().describe("Token name, symbol, or contract address"),
+      chainId: z
+        .number()
+        .optional()
+        .describe(
+          "Chain ID (REQUIRED if token is an address, optional for name/symbol)"
+        ),
+      chainName: z
+        .string()
+        .optional()
+        .describe(
+          "Chain name (REQUIRED if token is an address, optional for name/symbol)"
+        ),
     }),
-  },
+  }
 );
 
 /**
@@ -126,7 +150,7 @@ export const searchTokenTool = tool(
 
       if (results.length === 0) {
         return JSON.stringify({
-          error: 'No tokens found. Please try a different search term.',
+          error: "No tokens found. Please try a different search term.",
         });
       }
 
@@ -136,19 +160,19 @@ export const searchTokenTool = tool(
         tokens: results,
       });
     } catch (error) {
-      logger.error('Error in searchTokenTool:', error);
+      logger.error("Error in searchTokenTool:", error);
       return JSON.stringify({
-        error: `Failed to search tokens: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error: `Failed to search tokens: ${error instanceof Error ? error.message : "Unknown error"}`,
       });
     }
   },
   {
-    name: 'search_token',
-    description: 'Search for tokens by name or symbol (fuzzy search)',
+    name: "search_token",
+    description: "Search for tokens by name or symbol (fuzzy search)",
     schema: z.object({
-      query: z.string().describe('Search query (token name or symbol)'),
+      query: z.string().describe("Search query (token name or symbol)"),
     }),
-  },
+  }
 );
 
 /**
@@ -167,14 +191,14 @@ export const discoverProtocolsTool = tool(
       } else {
         if (!chainId) {
           return JSON.stringify({
-            error: 'chainId is required when multiChain is false',
+            error: "chainId is required when multiChain is false",
           });
         }
 
         const chainValidation = validateChain(chainId);
         if (!chainValidation.valid) {
           return JSON.stringify({
-            error: chainValidation.error || 'Invalid chain',
+            error: chainValidation.error || "Invalid chain",
           });
         }
 
@@ -183,21 +207,45 @@ export const discoverProtocolsTool = tool(
 
       if (protocols.length === 0) {
         return JSON.stringify({
-          error: 'No staking protocols found for this token on supported chains.',
-          suggestion: 'Try searching on different chains or check if token supports staking.',
+          error:
+            "No staking protocols found for this token on supported chains.",
+          suggestion:
+            "Try searching on different chains or check if token supports staking.",
         });
       }
 
-      // Add safety scores
-      const protocolsWithSafety = await addSafetyScores(protocols);
+      // Limit protocols before safety evaluation to save on API credits
+      // Pre-filter by TVL to get top protocols first, then evaluate safety for top 20
+      const maxProtocolsToEvaluate = 20; // Only evaluate safety for top 20 by TVL
+      const maxProtocolsToReturn = 15; // Return top 15 after sorting by safety+yield
+
+      logger.info(
+        `Found ${protocols.length} protocols. Evaluating safety for top ${maxProtocolsToEvaluate} by TVL.`
+      );
+
+      // Add safety scores (only for top protocols by TVL)
+      const protocolsWithSafety = await addSafetyScores(
+        protocols,
+        maxProtocolsToEvaluate
+      );
 
       // Sort by safety and yield
-      const sortedProtocols = sortProtocolsBySafetyAndYield(protocolsWithSafety);
+      const sortedProtocols =
+        sortProtocolsBySafetyAndYield(protocolsWithSafety);
+
+      // Return only top protocols to avoid token limit issues
+      const topProtocols = sortedProtocols.slice(0, maxProtocolsToReturn);
+
+      logger.info(
+        `Returning top ${topProtocols.length} protocols (sorted by safety and yield) out of ${protocols.length} total found`
+      );
 
       return JSON.stringify({
         success: true,
-        count: sortedProtocols.length,
-        protocols: sortedProtocols.map((p) => ({
+        count: topProtocols.length,
+        totalFound: protocols.length,
+        message: `Found ${protocols.length} total protocols. Showing top ${topProtocols.length} by safety and yield.`,
+        protocols: topProtocols.map((p) => ({
           address: p.address,
           name: p.name,
           protocol: p.protocol,
@@ -209,25 +257,28 @@ export const discoverProtocolsTool = tool(
         })),
       });
     } catch (error) {
-      logger.error('Error in discoverProtocolsTool:', error);
+      logger.error("Error in discoverProtocolsTool:", error);
       return JSON.stringify({
-        error: `Failed to discover protocols: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error: `Failed to discover protocols: ${error instanceof Error ? error.message : "Unknown error"}`,
       });
     }
   },
   {
-    name: 'discover_protocols',
+    name: "discover_protocols",
     description:
-      'Discover all available staking protocols/vaults for a token. Can search single chain or all supported chains.',
+      "Discover all available staking protocols/vaults for a token. Can search single chain or all supported chains.",
     schema: z.object({
-      tokenAddress: z.string().describe('Token contract address'),
-      chainId: z.number().optional().describe('Chain ID (required if multiChain is false)'),
+      tokenAddress: z.string().describe("Token contract address"),
+      chainId: z
+        .number()
+        .optional()
+        .describe("Chain ID (required if multiChain is false)"),
       multiChain: z
         .boolean()
         .default(true)
-        .describe('Whether to search across all supported chains'),
+        .describe("Whether to search across all supported chains"),
     }),
-  },
+  }
 );
 
 /**
@@ -251,13 +302,13 @@ export const generateTransactionTool = tool(
       // Validate inputs
       const amountValidation = validateAmount(
         amount,
-        BigInt('999999999999999999999999999'), // Max balance placeholder - should be checked separately
-        decimals,
+        BigInt("999999999999999999999999999"), // Max balance placeholder - should be checked separately
+        decimals
       );
 
       if (!amountValidation.valid) {
         return JSON.stringify({
-          error: amountValidation.error || 'Invalid amount',
+          error: amountValidation.error || "Invalid amount",
         });
       }
 
@@ -269,7 +320,7 @@ export const generateTransactionTool = tool(
         chainId,
         BigInt(amount),
         tokenSymbol,
-        decimals,
+        decimals
       );
 
       return JSON.stringify({
@@ -281,30 +332,30 @@ export const generateTransactionTool = tool(
           totalGasEstimate: bundle.totalGasEstimate,
         },
         warning:
-          '⚠️ CRITICAL: This transaction object was generated by an AI agent. Please verify all details before executing. This is not financial advice.',
+          "⚠️ CRITICAL: This transaction object was generated by an AI agent. Please verify all details before executing. This is not financial advice.",
       });
     } catch (error) {
-      logger.error('Error in generateTransactionTool:', error);
+      logger.error("Error in generateTransactionTool:", error);
       return JSON.stringify({
-        error: `Failed to generate transaction: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error: `Failed to generate transaction: ${error instanceof Error ? error.message : "Unknown error"}`,
       });
     }
   },
   {
-    name: 'generate_transaction',
+    name: "generate_transaction",
     description:
-      'Generate transaction bundle (approval + deposit) for staking tokens. Returns approval transaction if needed, and deposit transaction.',
+      "Generate transaction bundle (approval + deposit) for staking tokens. Returns approval transaction if needed, and deposit transaction.",
     schema: z.object({
-      userAddress: z.string().describe('User wallet address'),
-      tokenAddress: z.string().describe('Token contract address'),
-      protocolAddress: z.string().describe('Protocol/vault contract address'),
+      userAddress: z.string().describe("User wallet address"),
+      tokenAddress: z.string().describe("Token contract address"),
+      protocolAddress: z.string().describe("Protocol/vault contract address"),
       protocolName: z.string().describe('Protocol name (e.g., "aave-v3")'),
-      chainId: z.number().describe('Chain ID'),
-      amount: z.string().describe('Amount to deposit (in wei)'),
-      tokenSymbol: z.string().describe('Token symbol'),
-      decimals: z.number().describe('Token decimals'),
+      chainId: z.number().describe("Chain ID"),
+      amount: z.string().describe("Amount to deposit (in wei)"),
+      tokenSymbol: z.string().describe("Token symbol"),
+      decimals: z.number().describe("Token decimals"),
     }),
-  },
+  }
 );
 
 /**
@@ -314,7 +365,7 @@ export const validateInputTool = tool(
   async (input): Promise<string> => {
     const { input: userInput, inputType } = input;
     try {
-      if (inputType === 'token') {
+      if (inputType === "token") {
         const validation = validateTokenInput(userInput);
         return JSON.stringify({
           valid: validation.valid,
@@ -323,7 +374,7 @@ export const validateInputTool = tool(
         });
       }
 
-      if (inputType === 'chain') {
+      if (inputType === "chain") {
         const validation = validateChain(userInput);
         return JSON.stringify({
           valid: validation.valid,
@@ -333,23 +384,27 @@ export const validateInputTool = tool(
       }
 
       return JSON.stringify({
-        error: 'Unknown input type',
+        error: "Unknown input type",
       });
     } catch (error) {
-      logger.error('Error in validateInputTool:', error);
+      logger.error("Error in validateInputTool:", error);
       return JSON.stringify({
-        error: `Validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error: `Validation failed: ${error instanceof Error ? error.message : "Unknown error"}`,
       });
     }
   },
   {
-    name: 'validate_input',
-    description: 'Validate user input (token, chain, etc.)',
+    name: "validate_input",
+    description: "Validate user input (token, chain, etc.)",
     schema: z.object({
-      input: z.union([z.string(), z.number(), z.object({})]).describe('Input to validate'),
-      inputType: z.enum(['token', 'chain', 'amount']).describe('Type of input to validate'),
+      input: z
+        .union([z.string(), z.number(), z.object({})])
+        .describe("Input to validate"),
+      inputType: z
+        .enum(["token", "chain", "amount"])
+        .describe("Type of input to validate"),
     }),
-  },
+  }
 );
 
 /**
@@ -364,4 +419,3 @@ export function getYieldAgentTools(): Array<ReturnType<typeof tool>> {
     validateInputTool,
   ];
 }
-

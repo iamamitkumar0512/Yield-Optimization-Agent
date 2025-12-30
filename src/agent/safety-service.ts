@@ -246,18 +246,26 @@ function evaluateHistory(protocolName: string): { score: number; level: string }
 
 /**
  * Add safety scores to protocols
+ * @param protocols - Protocols to evaluate
+ * @param maxProtocols - Maximum number of protocols to evaluate (default: 30)
  */
 export async function addSafetyScores(
   protocols: ProtocolVault[],
+  maxProtocols: number = 30,
 ): Promise<ProtocolWithSafety[]> {
-  logger.info(`Adding safety scores to ${protocols.length} protocols`);
+  // Pre-filter by TVL before evaluation to save API credits
+  const protocolsToEvaluate = protocols
+    .sort((a, b) => b.tvl - a.tvl)
+    .slice(0, maxProtocols);
+
+  logger.info(`Adding safety scores to ${protocolsToEvaluate.length} protocols (filtered from ${protocols.length} total)`);
 
   const protocolsWithSafety: ProtocolWithSafety[] = [];
 
   // Evaluate protocols in parallel (with limit to avoid rate limits)
   const batchSize = 5;
-  for (let i = 0; i < protocols.length; i += batchSize) {
-    const batch = protocols.slice(i, i + batchSize);
+  for (let i = 0; i < protocolsToEvaluate.length; i += batchSize) {
+    const batch = protocolsToEvaluate.slice(i, i + batchSize);
     const evaluations = await Promise.all(
       batch.map((protocol) =>
         evaluateProtocolSafety(protocol).catch((error) => {
