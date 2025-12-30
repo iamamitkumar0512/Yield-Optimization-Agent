@@ -5,6 +5,7 @@
 
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
+import { isAddress } from 'viem';
 import { getTokenInfo, searchToken } from './api';
 import {
   discoverProtocols,
@@ -36,6 +37,17 @@ export const getTokenInfoTool = tool(
         });
       }
 
+      // Check if token is an address
+      const isTokenAddress = isAddress(token);
+
+      // If address provided but no chain, return error
+      if (isTokenAddress && !chainId && !chainName) {
+        return JSON.stringify({
+          error: 'Chain must be provided when using token address. Please specify the chain (e.g., ethereum, arbitrum, base).',
+          requiresChain: true,
+        });
+      }
+
       const tokenInfo = await getTokenInfo(token, chainId, chainName);
 
       if (!tokenInfo) {
@@ -53,6 +65,31 @@ export const getTokenInfoTool = tool(
         });
       }
 
+      // If only name/symbol provided (not address), show all chains
+      if (!isTokenAddress && tokenInfo.allChains && tokenInfo.allChains.length > 0) {
+        return JSON.stringify({
+          success: true,
+          token: {
+            name: tokenInfo.name,
+            symbol: tokenInfo.symbol,
+            coingeckoId: tokenInfo.coingeckoId,
+            marketCap: tokenInfo.marketCap,
+            price: tokenInfo.price,
+            verified: tokenInfo.verified,
+            description: tokenInfo.description,
+          },
+          allChains: tokenInfo.allChains.map((chain) => ({
+            chainId: chain.chainId,
+            chainName: chain.chainName,
+            address: chain.address,
+          })),
+          requiresConfirmation: true,
+          message: `Found ${tokenInfo.name} (${tokenInfo.symbol}) on ${tokenInfo.allChains.length} chain(s). Please confirm which chain and address you want to use:`,
+          warning: '⚠️ Please verify token details and select the correct chain before proceeding',
+        });
+      }
+
+      // If address + chain provided, return single token info
       return JSON.stringify({
         success: true,
         token: tokenInfo,
@@ -68,11 +105,11 @@ export const getTokenInfoTool = tool(
   {
     name: 'get_token_info',
     description:
-      'Get token information by name, symbol, or address. If address is provided, chainId or chainName MUST be provided.',
+      'Get token information by name, symbol, or address. IMPORTANT: If token is an address, chainId or chainName MUST be provided (will return error otherwise). If only name/symbol is provided, returns token info for ALL supported chains - user must then confirm which chain to use.',
     schema: z.object({
       token: z.string().describe('Token name, symbol, or contract address'),
-      chainId: z.number().optional().describe('Chain ID (required if token is an address)'),
-      chainName: z.string().optional().describe('Chain name (required if token is an address)'),
+      chainId: z.number().optional().describe('Chain ID (REQUIRED if token is an address, optional for name/symbol)'),
+      chainName: z.string().optional().describe('Chain name (REQUIRED if token is an address, optional for name/symbol)'),
     }),
   },
 );
@@ -318,7 +355,7 @@ export const validateInputTool = tool(
 /**
  * Get all tools for the agent
  */
-export function getYieldAgentTools() {
+export function getYieldAgentTools(): Array<ReturnType<typeof tool>> {
   return [
     getTokenInfoTool,
     searchTokenTool,

@@ -160,7 +160,6 @@ export function detectQuickMode(input: string): boolean {
 export function parseQuickModeInput(input: string): QuickModeInput | Error {
   try {
     // This is a basic parser - can be enhanced with LLM or more sophisticated parsing
-    const lowerInput = input.toLowerCase();
 
     // Try to extract amount (number at the start or after "deposit")
     let amount: string | undefined;
@@ -260,9 +259,6 @@ export function validateQuickModeInput(input: QuickModeInput): ValidationResult 
  * Comprehensive input validation
  */
 export function validateInput(input: string): ValidationResult {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-
   // Check if it's quick mode
   const isQuickMode = detectQuickMode(input);
 

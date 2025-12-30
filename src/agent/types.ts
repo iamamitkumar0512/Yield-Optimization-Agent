@@ -2,8 +2,6 @@
  * Agent-specific types and interfaces
  */
 
-import { SupportedChain } from '../common/types';
-
 /**
  * Token input from user
  */
@@ -76,7 +74,7 @@ export interface ProtocolVault {
  * Safety score for a protocol
  */
 export interface SafetyScore {
-  overall: 'very_safe' | 'safe' | 'moderate' | 'risky';
+  overall: "very_safe" | "safe" | "moderate" | "risky";
   score: number; // 0-100
   factors: {
     tvl: { score: number; level: string };
@@ -108,7 +106,7 @@ export interface ApprovalTransaction {
   tokenAddress: string; // Token being approved
   spender: string; // Protocol/vault address to approve
   amount: string; // Amount to approve (in wei)
-  type: 'approve';
+  type: "approve";
   safetyWarning: string; // Mandatory safety warning
 }
 
@@ -123,7 +121,7 @@ export interface DepositTransaction {
   gasPrice?: string; // Gas price
   chainId: number; // Chain ID
   protocol: string; // Protocol name
-  action: 'deposit' | 'stake'; // Action type
+  action: "deposit" | "stake"; // Action type
   tokenIn: {
     address: string;
     symbol: string;
@@ -136,7 +134,7 @@ export interface DepositTransaction {
   };
   estimatedGas?: string; // Estimated gas cost in USD
   slippage?: number; // Slippage tolerance
-  type: 'deposit';
+  type: "deposit";
   safetyWarning: string; // Mandatory safety warning
 }
 
@@ -146,7 +144,7 @@ export interface DepositTransaction {
 export interface TransactionBundle {
   approvalTransaction?: ApprovalTransaction; // Required if approval needed
   depositTransaction: DepositTransaction; // Always present
-  executionOrder: ('approve' | 'deposit')[]; // Order of execution
+  executionOrder: ("approve" | "deposit")[]; // Order of execution
   totalGasEstimate?: string; // Combined gas estimate
 }
 
@@ -161,4 +159,3 @@ export interface ApprovalCheckResult {
   error?: string;
   message: string;
 }
-

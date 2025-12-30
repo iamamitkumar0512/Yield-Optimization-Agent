@@ -3,27 +3,21 @@
  * Handles protocol discovery, approval checks, and transaction bundle creation
  */
 
-import {
-  EnsoClient,
-  BundleAction,
-  BundleParams,
-  BundleActionType,
-  TokenData,
-} from '@ensofinance/sdk';
-import { isAddress } from 'viem';
-import { formatUnits, parseUnits } from 'viem';
+import { EnsoClient, BundleAction, BundleParams } from "@ensofinance/sdk";
+import { isAddress } from "viem";
+import { formatUnits } from "viem";
 import {
   ProtocolVault,
   ApprovalCheckResult,
   ApprovalTransaction,
   DepositTransaction,
   TransactionBundle,
-} from './types';
-import { Logger } from '../common/logger';
-import { SUPPORTED_CHAINS, getChainById } from '../common/types';
-import { retryWithBackoff } from '../common/utils';
+} from "./types";
+import { Logger } from "../common/logger";
+import { SUPPORTED_CHAINS, getChainById } from "../common/types";
+import { retryWithBackoff } from "../common/utils";
 
-const logger = new Logger('EnsoService');
+const logger = new Logger("EnsoService");
 
 // Initialize Enso client
 let ensoClient: EnsoClient | null = null;
@@ -33,10 +27,10 @@ let ensoClient: EnsoClient | null = null;
  */
 export function initializeEnsoClient(apiKey: string): void {
   if (!apiKey) {
-    throw new Error('Enso API key is required');
+    throw new Error("Enso API key is required");
   }
   ensoClient = new EnsoClient({ apiKey });
-  logger.info('Enso client initialized');
+  logger.info("Enso client initialized");
 }
 
 /**
@@ -46,7 +40,9 @@ function getEnsoClient(): EnsoClient {
   if (!ensoClient) {
     const apiKey = process.env.ENSO_API_KEY;
     if (!apiKey) {
-      throw new Error('Enso API key not found. Set ENSO_API_KEY environment variable.');
+      throw new Error(
+        "Enso API key not found. Set ENSO_API_KEY environment variable."
+      );
     }
     initializeEnsoClient(apiKey);
   }
@@ -58,10 +54,12 @@ function getEnsoClient(): EnsoClient {
  */
 export async function discoverProtocols(
   tokenAddress: string,
-  chainId: number,
+  chainId: number
 ): Promise<ProtocolVault[]> {
   try {
-    logger.info(`Discovering protocols for token ${tokenAddress} on chain ${chainId}`);
+    logger.info(
+      `Discovering protocols for token ${tokenAddress} on chain ${chainId}`
+    );
 
     if (!isAddress(tokenAddress)) {
       throw new Error(`Invalid token address: ${tokenAddress}`);
@@ -79,7 +77,7 @@ export async function discoverProtocols(
         underlyingTokensExact: [tokenAddress as `0x${string}`],
         chainId: chainId,
         includeMetadata: true,
-        type: 'defi', // Only DeFi vaults
+        type: "defi", // Only DeFi vaults
       });
     });
 
@@ -87,33 +85,45 @@ export async function discoverProtocols(
 
     for (const token of tokenData.data || []) {
       // Filter to only include vaults/protocols (not the token itself)
-      if (token.address.toLowerCase() !== tokenAddress.toLowerCase() && token.apy > 0) {
+      const apyValue =
+        typeof token.apy === "string" ? parseFloat(token.apy) : token.apy || 0;
+      if (
+        token.address.toLowerCase() !== tokenAddress.toLowerCase() &&
+        apyValue > 0
+      ) {
+        const tvlValue =
+          typeof token.tvl === "string"
+            ? parseFloat(token.tvl)
+            : token.tvl || 0;
         protocols.push({
           address: token.address,
           name: token.name,
           symbol: token.symbol,
-          protocol: token.project || 'unknown',
+          protocol: token.project || "unknown",
           chainId: chainId,
           chainName: chain.name,
-          apy: token.apy || 0,
-          tvl: token.tvl || 0,
-          underlyingTokens: token.underlyingTokens?.map((ut) => ({
-            address: ut.address,
-            symbol: ut.symbol,
-            name: ut.name,
-          })) || [],
+          apy: apyValue,
+          tvl: tvlValue,
+          underlyingTokens:
+            token.underlyingTokens?.map((ut) => ({
+              address: ut.address,
+              symbol: ut.symbol,
+              name: ut.name,
+            })) || [],
           logosUri: token.logosUri,
           project: token.project,
         });
       }
     }
 
-    logger.info(`Found ${protocols.length} protocols for token ${tokenAddress} on chain ${chainId}`);
+    logger.info(
+      `Found ${protocols.length} protocols for token ${tokenAddress} on chain ${chainId}`
+    );
     return protocols;
   } catch (error) {
     logger.error(`Error discovering protocols:`, error);
     throw new Error(
-      `Failed to discover protocols: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      `Failed to discover protocols: ${error instanceof Error ? error.message : "Unknown error"}`
     );
   }
 }
@@ -122,9 +132,11 @@ export async function discoverProtocols(
  * Discover protocols across all supported chains
  */
 export async function discoverProtocolsMultiChain(
-  tokenAddress: string,
+  tokenAddress: string
 ): Promise<ProtocolVault[]> {
-  logger.info(`Discovering protocols for token ${tokenAddress} across all chains`);
+  logger.info(
+    `Discovering protocols for token ${tokenAddress} across all chains`
+  );
 
   const allProtocols: ProtocolVault[] = [];
 
@@ -133,7 +145,7 @@ export async function discoverProtocolsMultiChain(
     discoverProtocols(tokenAddress, chain.id).catch((error) => {
       logger.warn(`Failed to discover protocols on ${chain.name}:`, error);
       return [] as ProtocolVault[];
-    }),
+    })
   );
 
   const results = await Promise.all(promises);
@@ -155,18 +167,22 @@ export async function checkApprovalNeeded(
   tokenAddress: string,
   protocolAddress: string,
   chainId: number,
-  amount: bigint,
+  amount: bigint
 ): Promise<ApprovalCheckResult> {
   try {
     logger.info(
-      `Checking approval for token ${tokenAddress}, spender ${protocolAddress}, amount ${amount.toString()}`,
+      `Checking approval for token ${tokenAddress}, spender ${protocolAddress}, amount ${amount.toString()}`
     );
 
-    if (!isAddress(userAddress) || !isAddress(tokenAddress) || !isAddress(protocolAddress)) {
+    if (
+      !isAddress(userAddress) ||
+      !isAddress(tokenAddress) ||
+      !isAddress(protocolAddress)
+    ) {
       return {
         approvalNeeded: false,
-        error: 'Invalid address format',
-        message: 'Invalid address format',
+        error: "Invalid address format",
+        message: "Invalid address format",
       };
     }
 
@@ -187,25 +203,31 @@ export async function checkApprovalNeeded(
       });
 
       const approvalTransaction: ApprovalTransaction = {
-        to: approvalData.to,
-        data: approvalData.data,
-        value: approvalData.value || '0',
-        gasLimit: approvalData.gasLimit,
-        gasPrice: approvalData.gasPrice,
+        to: approvalData.tx.to,
+        data: approvalData.tx.data,
+        value:
+          typeof approvalData.tx.value === "string"
+            ? approvalData.tx.value
+            : approvalData.tx.value.toString(),
+        gasLimit:
+          typeof approvalData.gas === "string"
+            ? approvalData.gas
+            : approvalData.gas.toString(),
+        gasPrice: undefined, // Not provided by Enso SDK
         chainId: chainId,
         tokenAddress: tokenAddress,
         spender: protocolAddress,
         amount: amount.toString(),
-        type: 'approve',
+        type: "approve",
         safetyWarning:
-          '⚠️ CRITICAL: This transaction object was generated by an AI agent. Please verify all details (token address, protocol address, amount, chain) before executing. Double-check on block explorer and protocol website. This is not financial advice.',
+          "⚠️ CRITICAL: This transaction object was generated by an AI agent. Please verify all details (token address, protocol address, amount, chain) before executing. Double-check on block explorer and protocol website. This is not financial advice.",
       };
 
       return {
         approvalNeeded: true,
         requiredAmount: amount,
         approvalTransaction,
-        message: 'Approval transaction required before deposit',
+        message: "Approval transaction required before deposit",
       };
     } catch (error) {
       // If approval data fetch fails, assume approval might not be needed
@@ -213,16 +235,16 @@ export async function checkApprovalNeeded(
       logger.warn(`Failed to get approval data:`, error);
       return {
         approvalNeeded: false,
-        error: `Failed to check approval: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        message: 'Could not verify approval status',
+        error: `Failed to check approval: ${error instanceof Error ? error.message : "Unknown error"}`,
+        message: "Could not verify approval status",
       };
     }
   } catch (error) {
     logger.error(`Error checking approval:`, error);
     return {
       approvalNeeded: false,
-      error: `Failed to check approval: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      message: 'Could not verify approval status',
+      error: `Failed to check approval: ${error instanceof Error ? error.message : "Unknown error"}`,
+      message: "Could not verify approval status",
     };
   }
 }
@@ -238,15 +260,19 @@ export async function generateTransactionBundle(
   chainId: number,
   amount: bigint,
   tokenSymbol: string,
-  decimals: number,
+  decimals: number
 ): Promise<TransactionBundle> {
   try {
     logger.info(
-      `Generating transaction bundle for ${tokenSymbol} deposit to ${protocolName} on chain ${chainId}`,
+      `Generating transaction bundle for ${tokenSymbol} deposit to ${protocolName} on chain ${chainId}`
     );
 
-    if (!isAddress(userAddress) || !isAddress(tokenAddress) || !isAddress(protocolAddress)) {
-      throw new Error('Invalid address format');
+    if (
+      !isAddress(userAddress) ||
+      !isAddress(tokenAddress) ||
+      !isAddress(protocolAddress)
+    ) {
+      throw new Error("Invalid address format");
     }
 
     const client = getEnsoClient();
@@ -257,14 +283,14 @@ export async function generateTransactionBundle(
       tokenAddress,
       protocolAddress,
       chainId,
-      amount,
+      amount
     );
 
     // Step 2: Generate deposit transaction
     const bundleActions: BundleAction[] = [
       {
         protocol: protocolName,
-        action: BundleActionType.Deposit,
+        action: "deposit",
         args: {
           tokenIn: tokenAddress as `0x${string}`,
           tokenOut: protocolAddress as `0x${string}`,
@@ -277,7 +303,7 @@ export async function generateTransactionBundle(
     const bundleParams: BundleParams = {
       chainId: chainId,
       fromAddress: userAddress as `0x${string}`,
-      routingStrategy: 'router',
+      routingStrategy: "router",
       receiver: userAddress as `0x${string}`,
     };
 
@@ -288,12 +314,18 @@ export async function generateTransactionBundle(
     const depositTransaction: DepositTransaction = {
       to: depositTxData.tx.to,
       data: depositTxData.tx.data,
-      value: depositTxData.tx.value || '0',
-      gasLimit: depositTxData.tx.gasLimit,
-      gasPrice: depositTxData.tx.gasPrice,
+      value:
+        typeof depositTxData.tx.value === "string"
+          ? depositTxData.tx.value
+          : depositTxData.tx.value.toString(),
+      gasLimit:
+        typeof depositTxData.gas === "string"
+          ? depositTxData.gas
+          : depositTxData.gas.toString(),
+      gasPrice: undefined, // Not provided by Enso SDK
       chainId: chainId,
       protocol: protocolName,
-      action: 'deposit',
+      action: "deposit",
       tokenIn: {
         address: tokenAddress,
         symbol: tokenSymbol,
@@ -304,22 +336,24 @@ export async function generateTransactionBundle(
         address: protocolAddress,
         symbol: protocolName,
       },
-      type: 'deposit',
+      type: "deposit",
       safetyWarning:
-        '⚠️ CRITICAL: This transaction object was generated by an AI agent. Please verify all details (token address, protocol address, amount, chain) before executing. Double-check on block explorer and protocol website. This is not financial advice.',
+        "⚠️ CRITICAL: This transaction object was generated by an AI agent. Please verify all details (token address, protocol address, amount, chain) before executing. Double-check on block explorer and protocol website. This is not financial advice.",
     };
 
     // Step 3: Build transaction bundle
-    const executionOrder: ('approve' | 'deposit')[] = [];
+    const executionOrder: ("approve" | "deposit")[] = [];
 
     if (approvalCheck.approvalNeeded && approvalCheck.approvalTransaction) {
-      executionOrder.push('approve', 'deposit');
+      executionOrder.push("approve", "deposit");
 
       // Calculate total gas estimate
       const approvalGas = approvalCheck.approvalTransaction.gasLimit
         ? BigInt(approvalCheck.approvalTransaction.gasLimit)
         : BigInt(0);
-      const depositGas = depositTransaction.gasLimit ? BigInt(depositTransaction.gasLimit) : BigInt(0);
+      const depositGas = depositTransaction.gasLimit
+        ? BigInt(depositTransaction.gasLimit)
+        : BigInt(0);
       const totalGas = approvalGas + depositGas;
 
       return {
@@ -330,7 +364,7 @@ export async function generateTransactionBundle(
       };
     }
 
-    executionOrder.push('deposit');
+    executionOrder.push("deposit");
     return {
       depositTransaction,
       executionOrder,
@@ -338,7 +372,7 @@ export async function generateTransactionBundle(
   } catch (error) {
     logger.error(`Error generating transaction bundle:`, error);
     throw new Error(
-      `Failed to generate transaction bundle: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      `Failed to generate transaction bundle: ${error instanceof Error ? error.message : "Unknown error"}`
     );
   }
 }
@@ -346,7 +380,10 @@ export async function generateTransactionBundle(
 /**
  * Get token price from Enso
  */
-export async function getTokenPrice(tokenAddress: string, chainId: number): Promise<number | null> {
+export async function getTokenPrice(
+  tokenAddress: string,
+  chainId: number
+): Promise<number | null> {
   try {
     const client = getEnsoClient();
     const priceData = await retryWithBackoff(async () => {
@@ -356,10 +393,14 @@ export async function getTokenPrice(tokenAddress: string, chainId: number): Prom
       });
     });
 
-    return priceData.price || null;
+    const priceValue = priceData.price
+      ? typeof priceData.price === "string"
+        ? parseFloat(priceData.price)
+        : priceData.price
+      : null;
+    return priceValue;
   } catch (error) {
     logger.warn(`Failed to get token price:`, error);
     return null;
   }
 }
-
