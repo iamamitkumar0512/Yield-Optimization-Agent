@@ -16,7 +16,7 @@ export default tseslint.config(
 
     files: ['**/*.ts', '**/*.mts', 'src/**/*.ts'],
 
-    ignores: ['test-*.ts', 'test-scenarios.ts'],
+    ignores: ['test-api.ts'],
 
     plugins: {
       '@typescript-eslint': tseslint.plugin,
@@ -43,7 +43,7 @@ export default tseslint.config(
   },
   {
     // Separate config for test files without typed linting
-    files: ['test-*.ts', 'test-scenarios.ts'],
+    files: ['test-api.ts'],
 
     plugins: {
       '@typescript-eslint': tseslint.plugin,

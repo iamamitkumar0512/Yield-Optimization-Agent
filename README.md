@@ -1,6 +1,23 @@
-# Yield Optimization Agent
+# Yield Optimization Agent with tx data
 
-An AI-powered agent that helps users find the best and safest staking opportunities for their tokens across multiple DeFi protocols and chains.
+An AI-powered agent that helps users find the best and safest staking opportunities for their tokens across multiple DeFi protocols and chains with tx data.
+
+## 🚀 Quick Start - REST API
+
+We now provide a **production-ready REST API** with Swagger documentation!
+
+```bash
+# Install dependencies
+yarn install
+
+# Start the API server
+yarn start:api
+
+# Or with auto-reload for development
+yarn dev:api
+```
+
+**Access the Swagger UI:** `http://localhost:3000/api-docs`
 
 ## Features
 
@@ -12,15 +29,13 @@ An AI-powered agent that helps users find the best and safest staking opportunit
 - ⚠️ **Safety First**: Mandatory safety warnings and comprehensive validation
 - ⚡ **Optimized**: Returns top protocols only to minimize API usage and token consumption
 - 🔄 **Rate Limit Handling**: Automatic retry with exponential backoff for API rate limits
+- 🌐 **REST API**: Production-ready HTTP API with Swagger documentation
 
 ## Installation
 
 ```bash
 # Install dependencies
 yarn install
-
-# Or with npm
-npm install
 ```
 
 ## Configuration
@@ -34,13 +49,62 @@ ENSO_API_KEY=your_enso_api_key
 
 # Optional but recommended (for token information)
 COINGECKO_API_KEY=your_coingecko_demo_api_key
+
+# API Server Configuration (for REST API)
+PORT=3000
+NODE_ENV=development
+CORS_ORIGIN=*
+RATE_LIMIT_MAX=100
 ```
 
 **Note**: The CoinGecko API key is optional. If not provided, the agent will use fallback mock data for common tokens. For production use, a CoinGecko demo API key is recommended.
 
 ## Usage
 
-### Basic Usage
+### REST API Usage (Recommended)
+
+```bash
+# Start the API server
+yarn start:api
+
+# Make requests to the API
+curl -X POST http://localhost:3000/api/v1/agent/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Find staking opportunities for USDC on Ethereum"}'
+```
+
+**Interactive Documentation:** Visit `http://localhost:3000/api-docs` for the Swagger UI
+
+### API Endpoints
+
+The REST API provides the following endpoints:
+
+- **Agent Endpoints**:
+
+  - `POST /api/v1/agent/query` - Natural language queries to the AI agent
+  - `POST /api/v1/agent/batch` - Batch processing (up to 10 queries)
+  - `POST /api/v1/agent/quick` - Quick transaction generation
+
+- **Token Endpoints**:
+
+  - `GET /api/v1/tokens/search?query=USDC` - Search tokens by name/symbol
+  - `GET /api/v1/tokens/info?token=USDC&chainId=1` - Get detailed token information
+
+- **Protocol Endpoints**:
+
+  - `POST /api/v1/protocols/discover` - Discover staking protocols for a token
+
+- **Transaction Endpoints**:
+
+  - `POST /api/v1/transactions/generate` - Generate transaction bundles
+
+- **Utility Endpoints**:
+  - `GET /api/v1/chains` - Get supported chains
+  - `GET /health` - Health check
+
+👉 **See [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) for complete API reference**
+
+### Programmatic Usage (TypeScript/JavaScript)
 
 ```typescript
 import { runYieldAgent } from "./src";
@@ -274,6 +338,14 @@ yield-agent/
 │   │   ├── types.ts               # TypeScript types
 │   │   ├── output-structure.ts   # Response schema
 │   │   └── system-prompt.ts       # Agent system prompt
+│   ├── api/
+│   │   ├── server.ts              # Express server setup
+│   │   ├── routes.ts              # API route definitions
+│   │   ├── controllers.ts         # Request handlers
+│   │   ├── middleware.ts          # Validation & error handling
+│   │   ├── validation.ts          # Request validation schemas
+│   │   ├── swagger.ts             # OpenAPI configuration
+│   │   └── index.ts               # API module exports
 │   ├── common/
 │   │   ├── types.ts
 │   │   ├── logger.ts
@@ -281,7 +353,9 @@ yield-agent/
 │   └── index.ts                  # Public API
 ├── package.json
 ├── tsconfig.json
-└── README.md
+├── README.md
+├── API_DOCUMENTATION.md          # Complete API reference
+└── Yield-Agent-API.postman_collection.json  # Postman collection
 ```
 
 ### Building
@@ -300,11 +374,25 @@ yarn prettier
 ### Testing
 
 ```bash
-# Run tests
+# Run unit tests
 yarn test
+
+# Test API endpoints
+yarn test:api
+yarn test:api:full  # Includes AI agent tests
 ```
 
+### API Testing
+
+The API can be tested using:
+
+1. **Swagger UI**: `http://localhost:3000/api-docs` - Interactive testing interface
+2. **Postman**: Import `Yield-Agent-API.postman_collection.json`
+3. **Test Script**: Run `yarn test:api` for automated tests
+
 ## Dependencies
+
+### Core Agent
 
 - **LangGraph**: Agent framework
 - **Enso SDK**: Protocol discovery and transaction generation
@@ -312,6 +400,14 @@ yarn test
 - **viem**: Ethereum utilities
 - **Zod**: Schema validation
 - **OpenAI API**: LLM for agent reasoning
+
+### REST API
+
+- **Express.js**: Web framework
+- **Swagger UI**: Interactive API documentation
+- **Helmet**: Security headers
+- **CORS**: Cross-origin resource sharing
+- **express-rate-limit**: Rate limiting
 
 ## API Usage Optimization
 
